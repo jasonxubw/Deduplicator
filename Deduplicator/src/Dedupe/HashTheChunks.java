@@ -1,5 +1,6 @@
 package Dedupe;
 
+
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -9,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 
 public class HashTheChunks {
     // this function returns a file type as a string
@@ -52,20 +54,19 @@ public class HashTheChunks {
         return chunkSize;
     }
 
-    public String fixedSizeChunk(String filePath, int chunkSize) throws NoSuchAlgorithmException, IOException {
+    public String fixedSizeChunk(String filePath, int chunkSize, MyLocker locker) throws NoSuchAlgorithmException, IOException {
         FileInputStream fis = null;
-        try {
-            fis = new FileInputStream(filePath);
+        ArrayList<String> fileRetriever = new ArrayList<>();
 
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        byte[] chunk;
+        File file = new File(filePath);
+        String fileName = file.getName();
         Path p = FileSystems.getDefault().getPath(filePath);
         byte[] fileBytes = Files.readAllBytes(p);
-        System.out.println(fileBytes.length);
-        int currChunkPosition = 0;
 
+        String hashOfFile = hashContent(fileBytes);
+
+        int currChunkPosition = 0;
+        byte[] chunk;
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
 
         while(currChunkPosition < fileBytes.length) {
@@ -73,17 +74,14 @@ public class HashTheChunks {
             baos.write(fileBytes, currChunkPosition, chunkSize); // baos.write(byte[] chunk, offset, len)
             chunk = baos.toByteArray();
             // hash the chunks
-            MessageDigest md = MessageDigest.getInstance("SHA-1");
-            md.update(chunk);
-            byte[] hashedChunk = md.digest(chunk);
 
-            // turn hashed chunks to string representation
-            StringBuffer sb = new StringBuffer();
-            for (Byte SHAhash : hashedChunk){
-                sb.append(Integer.toString((SHAhash & 0xff) + 0x100, 16).substring(1));
-            }
-            String hashOutput = sb.toString();
+            String hashOutput = hashContent(chunk);
             currChunkPosition += chunkSize;
+            locker.storeChunktoChunkLocker(hashOutput, chunk); //stores to chunkLocker the hash and its chunk
+            fileRetriever.add(hashOutput);
+
+
+
             System.out.println("Each chunk's length: " + chunk.length + "  &&   Our chunk's hash output: " + hashOutput);
             baos.reset();
 
@@ -92,6 +90,23 @@ public class HashTheChunks {
                 chunkSize = fileBytes.length - currChunkPosition;
             }
         }
-    return "";
+        locker.storeFileToMyLocker(fileName, fileRetriever, hashOfFile);
+        System.out.println("Size of locker: " + locker.getSizeOfLocker());
+        System.out.println("Size of chunk locker: " + locker.getSizeOfChunkLocker());
+        System.out.println("Name of my locker: " + locker.getNameOfLocker());
+
+        return "";
+    }
+
+    public String hashContent(byte[] content) throws NoSuchAlgorithmException, IOException {
+        MessageDigest md = MessageDigest.getInstance("SHA-1");
+        md.update(content);
+        byte[] hashedFile = md.digest(content);
+        StringBuffer sb = new StringBuffer();
+        for(Byte SHAhash : hashedFile){
+            sb.append(Integer.toString((SHAhash & 0xff) + 0x100, 16).substring(1));
+        }
+        String hashedFileString = sb.toString();
+        return hashedFileString;
     }
 }
