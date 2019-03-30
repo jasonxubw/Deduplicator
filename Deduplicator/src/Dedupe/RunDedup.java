@@ -6,7 +6,6 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
 
 public class RunDedup {
     public static void main(String[] args) throws NoSuchAlgorithmException, IOException {
@@ -31,7 +30,7 @@ public class RunDedup {
 
 
 
-        String hashOutput = h.fixedSizeChunk(filePath1, chunkSize, locker);
+        h.fixedSizeChunk(filePath1, chunkSize, locker);
 //        locker.retrieveFileFromMyLocker("random.txt");
 
 
@@ -49,7 +48,7 @@ public class RunDedup {
         }
         else{
             System.out.println("This is a new file. Going to chunk this new file.");
-            String hashOutput2 = h.fixedSizeChunk(filePath2, chunkSize, locker);
+            h.fixedSizeChunk(filePath2, chunkSize, locker);
         }
 
     }
