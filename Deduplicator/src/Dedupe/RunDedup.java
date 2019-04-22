@@ -6,35 +6,13 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.NoSuchAlgorithmException;
-import java.sql.Connection;
-import java.util.Scanner;
-import java.util.Queue;
-import java.util.LinkedList;
+import java.util.*;
+
 
 public class RunDedup {
     public static void main(String[] args) throws NoSuchAlgorithmException, IOException {
 
-//        Connection connection = null;
-//
-//        try{
-//            connection = Database.getConnection();
-//            if(connection != null){
-//                System.out.println("Connection successful.");
-//            }
-//        }catch (Exception e){
-//            e.printStackTrace();
-//        }finally {
-//            if (connection != null){
-//                try {
-//                    connection.close();
-//                }
-//                catch (Exception e){
-//                    e.printStackTrace();
-//                }
-//            }
-//        }
-
-        Scanner user_input = new Scanner(System.in);
+        Scanner user_input = new Scanner(System.in).useDelimiter("\n");
         HashTheChunks h = new HashTheChunks();
         String input;
         do {
@@ -43,8 +21,6 @@ public class RunDedup {
         }
         // error handle for wrong insertions, if empty? not Y or not N
         while (input.isEmpty() && !input.equalsIgnoreCase("Y") && !input.equalsIgnoreCase("N"));
-
-        String filePath1 = "/Users/jasonxubw/desktop/random.txt";
 
         MyLocker locker;   //initialize MyLocker
         if (input.equalsIgnoreCase("Y")) {
@@ -67,10 +43,10 @@ public class RunDedup {
         while (!user_input.equals("done")) {
             // choose operations to operate locker
             do {
-                System.out.println("Please enter store, retrieve, delete or finish: ");
+                System.out.println("Please enter store, retrieve, delete, check files, or finish: ");
                 input = user_input.next();
                 if (locker.isFileLockerEmpty()) {
-                    if (input.equalsIgnoreCase("retrieve") || input.equalsIgnoreCase("delete")) {
+                    if (input.equalsIgnoreCase("retrieve") || input.equalsIgnoreCase("delete") || input.equalsIgnoreCase("check files")) {
                         System.out.println("Locker is currently empty! Please store a file first");
                         input = "";
                     }
@@ -79,6 +55,7 @@ public class RunDedup {
                     && !input.equalsIgnoreCase("store")
                     && !input.equalsIgnoreCase("retrieve")
                     && !input.equalsIgnoreCase("delete")
+                    && !input.equalsIgnoreCase("check files")
                     && !input.equalsIgnoreCase("finish"));
 
             if (input.equalsIgnoreCase("store")) {
@@ -87,6 +64,8 @@ public class RunDedup {
                     input = user_input.next();
                     // for doing single or directory
                 } while (!input.equalsIgnoreCase("multiple") && !input.equalsIgnoreCase("single"));
+
+                //SINGLE FILE STORAGE
                 if (input.equalsIgnoreCase("single")) {
                     System.out.println("Please enter path of the file");
                     String filePath = user_input.next();
@@ -96,34 +75,84 @@ public class RunDedup {
 
                     // calls getFileSize to get the file size
                     int fileSize = h.getFileSize(file);
-                    System.out.println("File Size : " + fileSize);
+                    System.out.println("File Size : " + (fileSize / 1000) + "kb");
 
                     // calls getFileExtension to get the file type
                     String extension = h.getFileExtension(file);
-                    System.out.println("File Extension : " + extension);
 
-                    if (extension != null && extension.equals(".txt")) {
+                    //SINGLE FILE: Fix sized chunking
+                    long timerStart;
+                    long timerEnd;
+                    if (extension != null && (h.isVideo(extension) || h.isImage(extension) || h.isPDF(extension))){
                         if (fileExisted != null) {
-                            System.out.println(filename + " is already in locker." + " start deduplication");
-                            // start referencing the chunks
+                            System.out.println("File name: " + filename + " exists in locker. Would you like to replace the file? (Y/N)");
+                            input = user_input.next();
+                            if(input.equalsIgnoreCase("Y")){
+                                Path p = FileSystems.getDefault().getPath(filePath);
+                                byte[] bytesOfNewFile = Files.readAllBytes(p);
+                                String hashOfNewFile = h.hashContent(bytesOfNewFile);
+                                String hashOfExistedFile = fileExisted.getHashOfFile();
+                                long sizeOfNewFile = bytesOfNewFile.length;
+
+                                if(!(hashOfNewFile.equals(hashOfExistedFile) && (sizeOfNewFile == fileExisted.getOriginalFileSize()))){
+                                    timerStart = System.currentTimeMillis();
+                                    locker.deleteFile(filename);
+                                    manageFixSizeChunking(locker, filename, filePath, extension, fileSize, h);
+                                    timerEnd = System.currentTimeMillis();
+                                    System.out.println("Time used to store file <<" + filename + ">> via Fix Sized Chunking is " + (double) (timerEnd - timerStart)/1000 + " seconds." );
+                                    System.out.println("-------------------------------------" + "\n");
+                                }
+                                else{
+                                    System.out.println("Exact same file exists. Nothing is done.");
+                                }
+                            }
                         } else {
-                            System.out.println("Storing " + filename + " using fixed size chunking");
-                            int chunkSize = h.getChunksize(extension, fileSize);
-                            h.fixedSizeChunk(filePath, chunkSize, locker);
-                            System.out.println(filename + " is added successfully");
-                        }
-                    } else {
-                        if (fileExisted != null) {
-                            System.out.println(filename + " is already in locker." + " start deduplication");
-                            // start referencing the chunks
-                        } else {
-                            System.out.println("Storing " + filename + " using dynamic size chunking");
-                            int chunkSize = h.getChunksize(extension, fileSize);
-                            h.dynamicSizeChunk(filePath, chunkSize, locker);
-                            System.out.println(filename + " is added successfully");
+                            timerStart = System.currentTimeMillis();
+
+                            manageFixSizeChunking(locker, filename, filePath, extension, fileSize, h);
+                            timerEnd = System.currentTimeMillis();
+                            System.out.println("Time used to store file <<" + filename + ">> via Fix Sized Chunking is " + (double) (timerEnd - timerStart)/1000 + " seconds." );
+                            System.out.println("-------------------------------------" + "\n");
                         }
                     }
-                } else if (input.equalsIgnoreCase("multiple")) {
+                    //SINGLE FILE: Dynamic sized chunking
+                    else if(extension != null){
+                        if (fileExisted != null) {
+                            System.out.println("File name: " + filename + " exists in locker. Would you like to replace the file? (Y/N)");
+                            input = user_input.next();
+                            if(input.equalsIgnoreCase("Y")){
+                                Path p = FileSystems.getDefault().getPath(filePath);
+                                byte[] bytesOfNewFile = Files.readAllBytes(p);
+                                String hashOfNewFile = h.hashContent(bytesOfNewFile);
+                                String hashOfExistedFile = fileExisted.getHashOfFile();
+                                long sizeOfNewFile = bytesOfNewFile.length;
+
+                                if(!(hashOfNewFile.equals(hashOfExistedFile) && (sizeOfNewFile == fileExisted.getOriginalFileSize()))){
+
+                                    timerStart = System.currentTimeMillis();
+
+                                    locker.deleteFile(filename);
+                                    manageDynamicSizeChunking(locker, filename, filePath, extension, fileSize, h);
+
+                                    timerEnd = System.currentTimeMillis();
+                                    System.out.println("Time used to store file <<" + filename + ">> via Dynamic Sized Chunking is " + (double) (timerEnd - timerStart)/1000 + " seconds." );
+                                    System.out.println("-------------------------------------" + "\n");
+                                }
+                                else{
+                                    System.out.println("Exact same file exists. Nothing is done.");
+                                }
+                            }
+                        } else {
+                            timerStart = System.currentTimeMillis();
+                            manageDynamicSizeChunking(locker, filename, filePath, extension, fileSize, h);
+                            timerEnd = System.currentTimeMillis();
+                            System.out.println("Time used to store file <<" + filename + ">> via Dynamic Sized Chunking is " + (double) (timerEnd - timerStart)/1000 + " seconds." );
+                            System.out.println("-------------------------------------" + "\n");
+                        }
+                    }
+                }
+                //MULTIPLE FILE STORAGE
+                else if (input.equalsIgnoreCase("multiple")) {
                     Queue<File> storeQueue = new LinkedList<>();
                     System.out.println("Please enter path of the directory");
                     String directoryPath = user_input.next();
@@ -141,30 +170,80 @@ public class RunDedup {
                             MyFile fileExisted = locker.getSameFileNameFromLocker(filename);
 
                             int fileSize = h.getFileSize(currFile);
-                            System.out.println("File Size : " + fileSize);
+                            System.out.println("File Size : " + (fileSize / 1000) + "kb");
 
                             String extension = h.getFileExtension(currFile);
-                            System.out.println("File Extension : " + extension);
 
-                            if (extension != null && extension.equals(".txt")) {
+                            long timerStart;
+                            long timerEnd;
+                            //MULTIPLE FILE: Fixed size chunking
+                            if (extension != null && (h.isVideo(extension) || h.isPDF(extension)) || h.isImage(extension)) {
                                 if (fileExisted != null) {
-                                    System.out.println(filename + " is already in locker." + " start deduplication");
-                                    // start referencing the chunks
+                                    System.out.println("File name: " + filename + " exists in locker. Would you like to replace the file? (Y/N)");
+                                    input = user_input.next();
+                                    if(input.equalsIgnoreCase("Y")){
+                                        Path p = FileSystems.getDefault().getPath(currFilepath);
+                                        byte[] bytesOfNewFile = Files.readAllBytes(p);
+                                        String hashOfNewFile = h.hashContent(bytesOfNewFile);
+                                        String hashOfExistedFile = fileExisted.getHashOfFile();
+                                        long sizeOfNewFile = bytesOfNewFile.length;
+
+                                        if(!(hashOfNewFile.equals(hashOfExistedFile) && (sizeOfNewFile == fileExisted.getOriginalFileSize()))){
+                                            timerStart = System.currentTimeMillis();
+
+                                            locker.deleteFile(filename);
+                                            manageFixSizeChunking(locker, filename, currFilepath, extension, fileSize, h);
+
+                                            timerEnd = System.currentTimeMillis();
+                                            System.out.println("Time used to store file <<" + filename + ">> via Fix Sized Chunking is " + (double) (timerEnd - timerStart)/1000 + " seconds." );
+                                            System.out.println("-------------------------------------" + "\n");
+                                        }
+                                        else{
+                                            System.out.println("Exact same file exists. Nothing is done.");
+                                        }
+
+
+                                    }
                                 } else {
-                                    System.out.println("Storing " + filename + " using fixed size chunking");
-                                    int chunkSize = h.getChunksize(extension, fileSize);
-                                    h.fixedSizeChunk(currFilepath, chunkSize, locker);
-                                    System.out.println(filename + " is added successfully");
+                                    timerStart = System.currentTimeMillis();
+                                    manageFixSizeChunking(locker, filename, currFilepath, extension, fileSize, h);
+                                    timerEnd = System.currentTimeMillis();
+                                    System.out.println("Time used to store file <<" + filename + ">> via Fix Sized Chunking is " + (double) (timerEnd - timerStart)/1000 + " seconds." );
+                                    System.out.println("-------------------------------------" + "\n");
                                 }
-                            } else {
+                            //MULTIPLE FILE: Dynamic size chunking
+                            } else if (extension != null){
                                 if (fileExisted != null) {
-                                    System.out.println(filename + " is already in locker." + " start deduplication");
-                                    // start referencing the chunks
+                                    System.out.println("File name: " + filename + " exists in locker. Would you like to replace the file? (Y/N)");
+                                    input = user_input.next();
+                                    if(input.equalsIgnoreCase("Y")){
+                                        Path p = FileSystems.getDefault().getPath(currFilepath);
+                                        byte[] bytesOfNewFile = Files.readAllBytes(p);
+                                        String hashOfNewFile = h.hashContent(bytesOfNewFile);
+                                        String hashOfExistedFile = fileExisted.getHashOfFile();
+                                        long sizeOfNewFile = bytesOfNewFile.length;
+
+                                        if(!(hashOfNewFile.equals(hashOfExistedFile) && (sizeOfNewFile == fileExisted.getOriginalFileSize()))){
+
+                                            timerStart = System.currentTimeMillis();
+
+                                            locker.deleteFile(filename);
+                                            manageDynamicSizeChunking(locker, filename, currFilepath, extension, fileSize, h);
+
+                                            timerEnd = System.currentTimeMillis();
+                                            System.out.println("Time used to store file <<" + filename + ">> via Dynamic Sized Chunking is " + (double) (timerEnd - timerStart)/1000 + " seconds." );
+                                            System.out.println("-------------------------------------" + "\n");
+                                        }
+                                        else{
+                                            System.out.println("Exact same file exists. Nothing is done.");
+                                        }
+                                    }
                                 } else {
-                                    System.out.println("Storing " + filename + " using dynamic size chunking");
-                                    int chunkSize = h.getChunksize(extension, fileSize);
-                                    h.dynamicSizeChunk(currFilepath, chunkSize, locker);
-                                    System.out.println(filename + " is added successfully");
+                                    timerStart = System.currentTimeMillis();
+                                    manageDynamicSizeChunking(locker, filename, currFilepath, extension, fileSize, h);
+                                    timerEnd = System.currentTimeMillis();
+                                    System.out.println("Time used to store file <<" + filename + ">> via Dynamic Sized Chunking is " + (double) (timerEnd - timerStart)/1000 + " seconds." );
+                                    System.out.println("-------------------------------------" + "\n");
                                 }
                             }
                         }
@@ -172,36 +251,80 @@ public class RunDedup {
                 }
 
             } else if (input.equalsIgnoreCase("retrieve")) {
+                long timerStart;
+                long timerEnd;
+
+                System.out.println("Enter the path in which you want to store the retrieved file. ");
+                String retrievalPath = user_input.next();
+                File rPath = new File(retrievalPath);
+                while(!rPath.isDirectory()){
+                    System.out.println("The path you entered is invalid. Please try again. ");
+                    retrievalPath = user_input.next();
+                    rPath = new File(retrievalPath);
+                }
+
                 System.out.println("Enter name of the file you want to retrieve.");
                 String retrievalFileName;
                 do {
                     retrievalFileName = user_input.next();
                     if (locker.sameFileNameExists(retrievalFileName)) {
-                        locker.retrieveFileFromMyLocker(retrievalFileName);
+                        timerStart = System.currentTimeMillis();
+
+                        locker.retrieveFileFromMyLocker(retrievalFileName, retrievalPath);
+                        timerEnd = System.currentTimeMillis();
                         System.out.println(retrievalFileName + " file has been retrieved successfully");
+                        System.out.println("Time used to retrieve file <<" + retrievalFileName + ">> is " + (double) (timerEnd - timerStart)/1000 + " seconds.");
+                        System.out.println("-------------------------------------" + "\n");
+
                     } else {
                         System.out.println("Could not find file you want to retrieve.");
                     }
                 }
                 while (!locker.sameFileNameExists(retrievalFileName));
             } else if (input.equalsIgnoreCase("delete")) {
-                System.out.println("Enter name of the file you want to delete.");
+                long timerStart;
+                long timerEnd;
+
+                System.out.println("Enter name of the file you want to delete. Please try again. ");
                 String deletionFileName;
                 do {
                     deletionFileName = user_input.next();
                     if (locker.sameFileNameExists(deletionFileName)) {
+                        timerStart = System.currentTimeMillis();
+
                         locker.deleteFile(deletionFileName);
+                        timerEnd = System.currentTimeMillis();
+
                         System.out.println(deletionFileName + " file deleted from file locker.");
+                        System.out.println("Time used to delete file <<" + deletionFileName + ">> is " + (double) (timerEnd - timerStart)/1000 + " seconds.");
+                        System.out.println("-------------------------------------" + "\n");
                     } else {
                         System.out.println("Could not find file you want to delete.");
                     }
                 }
                 while (deletionFileName.equals("finish"));
-            } else if (input.equalsIgnoreCase("finish")) {
+            } else if (input.equalsIgnoreCase("check files")){
+                locker.showFilesInFileLocker();
+            }else if (input.equalsIgnoreCase("finish")) {
+                locker.printMyLockerStats();
                 user_input.close();
                 break;
             }
         }
         user_input.close();
+    }
+
+    public static void manageFixSizeChunking(MyLocker locker, String filename, String filePath, String extension, int fileSize, HashTheChunks h) throws IOException, NoSuchAlgorithmException{
+        System.out.println("Storing " + filename + " using fixed size chunking");
+        int chunkSize = h.getChunksize(extension, fileSize);
+        h.fixedSizeChunk(filePath, chunkSize, locker);
+        System.out.println(filename + " is added successfully");
+    }
+
+    public static void manageDynamicSizeChunking(MyLocker locker, String filename, String filePath, String extension, int fileSize, HashTheChunks h) throws IOException, NoSuchAlgorithmException{
+        System.out.println("Storing " + filename + " using dynamic size chunking");
+        int chunkSize = h.getChunksize(extension, fileSize);
+        h.dynamicSizeChunk(filePath, chunkSize, locker);
+        System.out.println(filename + " is added successfully");
     }
 }
