@@ -177,7 +177,7 @@ public class RunDedup {
                             long timerStart;
                             long timerEnd;
                             //MULTIPLE FILE: Fixed size chunking
-                            if (extension != null && (h.isVideo(extension) || h.isPDF(extension)) || h.isImage(extension)) {
+                            if (extension != null && (h.isVideo(extension) || h.isPDF(extension)) || h.isImage(extension) || h.isTextFile(extension)) {
                                 if (fileExisted != null) {
                                     System.out.println("File name: " + filename + " exists in locker. Would you like to replace the file? (Y/N)");
                                     input = user_input.next();
