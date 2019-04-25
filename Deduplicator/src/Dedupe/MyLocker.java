@@ -9,7 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 
 
-public class MyLocker {
+public class MyLocker implements Serializable{
     private final String myLockerName;
     private final ArrayList<MyFile> fileLocker;
     private final HashMap<String, byte[]> chunkLocker;
@@ -40,7 +40,7 @@ public class MyLocker {
 
     protected boolean retrieveFileFromMyLocker(String fileName, String retrievalPath) throws IOException {
         MyFile file = getFile(fileName);
-        File retrievedFile = new File(retrievalPath + "/retrieved_"+fileName);
+        File retrievedFile = new File(retrievalPath + File.separator + "retrieved_"+fileName); //File.separator for platform independent path "/"(mac) or "\"(windows)
         ArrayList<String> retrievalArray = file.getFileRetriever();
         FileOutputStream fos = new FileOutputStream(retrievedFile);
         for(int i = 0; i < retrievalArray.size(); i++){
@@ -81,7 +81,6 @@ public class MyLocker {
             System.out.println("File not found.");
             return false;
         }
-
         for(String reconstructorString : f.getFileRetriever()){
             for(MyFile ff : this.fileLocker){
                 if(ff != f){
@@ -91,9 +90,9 @@ public class MyLocker {
                 }
             }
         }
-
+        deductSizeFromChunkLocker(f.getActualStoredSize());
+        deductFromOriginalFileSize(f.getOriginalFileSize());
         this.fileLocker.remove(f);
-        /* implement: subtract file size from total locker size */
         return true;
     }
 
@@ -125,6 +124,8 @@ public class MyLocker {
     protected void addSizeToChunkLocker(long size){
         this.lockerSize += size;
     }
+
+    protected void deductSizeFromChunkLocker(long size) { this.lockerSize -= size; }
 
     protected HashMap<String, byte[]> getChunkLocker(){
         return this.chunkLocker;
@@ -159,6 +160,8 @@ public class MyLocker {
         this.originalFileSize += size;
     }
 
+    protected void deductFromOriginalFileSize(long size) { this.originalFileSize -= size; }
+
     protected long getOriginalFileSize(){
         return this.originalFileSize;
     }
@@ -171,7 +174,7 @@ public class MyLocker {
 
     protected void printMyLockerStats(){
         int filecounter = 1;
-        System.out.println("\n");
+        System.out.println();
         System.out.println("====== Locker Name ======");
         System.out.println("         " + this.getNameOfLocker() + "\n");
         System.out.println("==== Size of Locker ====");
@@ -180,9 +183,10 @@ public class MyLocker {
         System.out.println("==== Files ====");
         System.out.println("Number of files: " + fileLocker.size() + "\n");
         for(MyFile file : this.fileLocker){
-            System.out.println(filecounter + ".  " + file.getNameOfMyFile());
-            System.out.println("Original Size: " + (file.getOriginalFileSize() / 1000) + "kb");
-            System.out.println("Deduped Size: " + (file.getActualStoredSize() / 1000) + "kb");
+            System.out.println("[" + filecounter + "]");
+            System.out.println("File name: " + file.getNameOfMyFile());
+            System.out.println("Original size: " + (file.getOriginalFileSize() / 1000) + "kb");
+            System.out.println("Deduped size: " + (file.getActualStoredSize() / 1000) + "kb");
             System.out.println();
             filecounter++;
         }
