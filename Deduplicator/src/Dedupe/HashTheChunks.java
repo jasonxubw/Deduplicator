@@ -12,7 +12,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
-import java.util.List;
 
 public class HashTheChunks {
     // this function returns a file type as a string
@@ -63,8 +62,11 @@ public class HashTheChunks {
             else if(fileSize > 1000000){ //1mb
                 chunkSize = 2048;
             }
-            else{
+            else if(fileSize > 500000){ //0.5mb
                 chunkSize = 512;
+            }
+            else{
+                chunkSize = 64;
             }
         }
         if((isImage(extension) || isTextFile(extension))){
@@ -74,8 +76,11 @@ public class HashTheChunks {
             else if(fileSize > 1000000){ //1mb
                 chunkSize = 1024;
             }
-            else{
+            else if(fileSize > 500000){ //0.5mb
                 chunkSize = 512;
+            }
+            else{
+                chunkSize = 64;
             }
         }
         return chunkSize;
@@ -95,7 +100,8 @@ public class HashTheChunks {
     public boolean isImage(String extension){
         if(extension.equalsIgnoreCase(".png") ||
            extension.equalsIgnoreCase(".jpeg") ||
-           extension.equalsIgnoreCase(".gif")) {
+           extension.equalsIgnoreCase(".gif") ||
+           extension.equalsIgnoreCase(".jpg")){
             return true;
         }
         return false;
@@ -164,10 +170,10 @@ public class HashTheChunks {
         }
         locker.storeFileToMyLocker(fileName, fileRetriever, hashOfFile, hs, originalFileSize, actualStoredSize);
         locker.addSizeToChunkLocker(sizeInsertedInLocker);
-        System.out.println("Size of file locker: " + locker.getSizeOfFileLocker());
-        System.out.println("Size of chunk locker: " + locker.getNumOfChunksInChunkLocker());
-        System.out.println("Name of my locker: " + locker.getNameOfLocker());
-        System.out.println("Size of entire locker: " + (locker.getSizeOfChunkLocker() / 1000) + "kb");
+//        System.out.println("Size of file locker: " + locker.getSizeOfFileLocker());
+//        System.out.println("Size of chunk locker: " + locker.getNumOfChunksInChunkLocker());
+//        System.out.println("Name of my locker: " + locker.getNameOfLocker());
+//        System.out.println("Size of entire locker: " + (locker.getSizeOfChunkLocker() / 1000) + "kb");
 
         return;
     }
@@ -186,7 +192,7 @@ public class HashTheChunks {
 
         String hashOfFile = hashContent(fileBytes);
 
-        int largePrimeNumber = 69031;
+        int largePrimeNumber = 71257;
         int fileBytesLength = fileBytes.length; // length of the file bytes array
         int rkWindowIndex = 0; //keep track of the rabin karp window's index
         int currRKWindowStartIndex = 0;
