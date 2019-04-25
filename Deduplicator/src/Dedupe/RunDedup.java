@@ -1,7 +1,8 @@
 package Dedupe;
 
-import java.io.File;
-import java.io.IOException;
+import com.sun.xml.internal.ws.policy.privateutil.PolicyUtils;
+
+import java.io.*;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -15,35 +16,74 @@ public class RunDedup {
         Scanner user_input = new Scanner(System.in).useDelimiter("\n");
         HashTheChunks h = new HashTheChunks();
         String input;
-        do {
-            System.out.println("Creating new locker? [Y/N]");
+        System.out.println("Create new locker [create] || Load existing locker [load] || Terminate [end]");
+        input = user_input.next();
+        while (!(input.equalsIgnoreCase("create")) && !(input.equalsIgnoreCase("load")) && !(input.equalsIgnoreCase("end"))){
+            System.out.println("Invalid input. Please try again. \nCreate new locker [create] || Load existing locker [load] || Terminate [end]");
             input = user_input.next();
         }
-        // error handle for wrong insertions, if empty? not Y or not N
-        while (input.isEmpty() && !input.equalsIgnoreCase("Y") && !input.equalsIgnoreCase("N"));
 
-        MyLocker locker;   //initialize MyLocker
-        if (input.equalsIgnoreCase("Y")) {
+        MyLocker locker = null;   //initialize MyLocker
+        String lockerName = "";
+        if (input.equalsIgnoreCase("create")) {
             System.out.println("Please enter a name for your new Locker: ");
-            String lockerName = user_input.next();
+            input = user_input.next();
+            lockerName = input;
             locker = new MyLocker(lockerName);
             System.out.println("Locker " + lockerName + " is created!");
-        } else if (input.equalsIgnoreCase("N")) {
-            System.out.println("Please enter the name of the existed locker to load: ");
-            String lockerName = user_input.next();
-            return;
-            // locker = loadDB(lockerName);
-            // to be continued, figure out how to loadDB first
-        } else {
-            System.out.println("Unexpected problem detected.");
-            user_input.close();
+        } else if (input.equalsIgnoreCase("load")) {
+            System.out.println("Loading Locker from default path [load] || Import Locker from specified path [import]");
+            input = user_input.next();
+
+            while(!input.equalsIgnoreCase("load") && !input.equalsIgnoreCase("import")){
+                System.out.println("Invalid input. Please try again. \n" + "Loading Locker from default path [load] || Import Locker from specified path [import]");
+                input = user_input.next();
+            }
+
+            if (input.equalsIgnoreCase("load")) {
+                boolean validImportLockerName = false;
+                while (validImportLockerName == false) {
+                    System.out.println("Please enter the name of the existing locker: ");
+                    input = user_input.next();
+                    lockerName = input;
+                    try {
+                        locker = importSerializedLocker(lockerName);
+                        validImportLockerName = true;
+                        System.out.println(lockerName + " loaded successfully!");
+                    } catch (Exception e) {
+                        System.out.println("Locker " + lockerName + " does not exist. Please try again.");
+                    }
+                }
+            }
+            else if(input.equalsIgnoreCase("import")){
+                boolean validImportLocker = false;
+                System.out.println("Please enter valid path of the Locker you are importing: ");
+                while(validImportLocker == false) {
+                    input = user_input.next();
+                    File importPath = new File(input);
+                    while(importPath.isDirectory()){
+                        System.out.println("Import path is invalid. Please try again. \n" + "Please enter valid path of the Locker you are importing:");
+                        input = user_input.next();
+                        importPath = new File(input);
+                    }
+                    lockerName = input.substring(input.lastIndexOf(File.separator) + 1);
+                    try {
+                        locker = importLocker(input);
+                        validImportLocker = true;
+                        System.out.println(lockerName + " imported successfully!");
+                    } catch (Exception e) {
+                        System.out.println("Locker " + lockerName + " does not exist. Please try again. \n" + "Please enter valid path of the Locker you are importing:");
+                    }
+                }
+            }
+        } else if(input.equalsIgnoreCase("end")){
             return;
         }
 
-        while (!user_input.equals("done")) {
+        while (!user_input.equals("finish")) {
             // choose operations to operate locker
             do {
-                System.out.println("Please enter store, retrieve, delete, check files, or finish: ");
+                System.out.println("Please enter [store], [retrieve], [delete], [check files], or [finish]: ");
                 input = user_input.next();
                 if (locker.isFileLockerEmpty()) {
                     if (input.equalsIgnoreCase("retrieve") || input.equalsIgnoreCase("delete") || input.equalsIgnoreCase("check files")) {
@@ -70,6 +110,11 @@ public class RunDedup {
                     System.out.println("Please enter path of the file");
                     String filePath = user_input.next();
                     File file = new File(filePath);
+                    while(file.isDirectory() || !file.exists()){
+                        System.out.println("Invalid file path. Please try again. \n" + "Please enter path of the file");
+                        filePath = user_input.next();
+                        file = new File(filePath);
+                    }
                     String filename = file.getName();
                     MyFile fileExisted = locker.getSameFileNameFromLocker(filename);
 
@@ -83,7 +128,7 @@ public class RunDedup {
                     //SINGLE FILE: Fix sized chunking
                     long timerStart;
                     long timerEnd;
-                    if (extension != null && (h.isVideo(extension) || h.isImage(extension) || h.isPDF(extension))){
+                    if (extension != null && !filename.equalsIgnoreCase(".DS_STORE") && (h.isVideo(extension) || h.isImage(extension) || h.isPDF(extension))){
                         if (fileExisted != null) {
                             System.out.println("File name: " + filename + " exists in locker. Would you like to replace the file? (Y/N)");
                             input = user_input.next();
@@ -103,7 +148,7 @@ public class RunDedup {
                                     System.out.println("-------------------------------------" + "\n");
                                 }
                                 else{
-                                    System.out.println("Exact same file exists. Nothing is done.");
+                                    System.out.println("Exact same file exists. Nothing is done. \n");
                                 }
                             }
                         } else {
@@ -116,7 +161,7 @@ public class RunDedup {
                         }
                     }
                     //SINGLE FILE: Dynamic sized chunking
-                    else if(extension != null){
+                    else if(extension != null && !filename.equalsIgnoreCase(".DS_STORE")){
                         if (fileExisted != null) {
                             System.out.println("File name: " + filename + " exists in locker. Would you like to replace the file? (Y/N)");
                             input = user_input.next();
@@ -161,6 +206,7 @@ public class RunDedup {
                         System.out.println("This is not a directory");
                     } else {
                         for (File file : directoryFile.listFiles()) {
+
                             storeQueue.offer(file);
                         }
                         while (!storeQueue.isEmpty()) {
@@ -177,7 +223,7 @@ public class RunDedup {
                             long timerStart;
                             long timerEnd;
                             //MULTIPLE FILE: Fixed size chunking
-                            if (extension != null && (h.isVideo(extension) || h.isPDF(extension)) || h.isImage(extension) || h.isTextFile(extension)) {
+                            if (extension != null && !filename.equalsIgnoreCase(".DS_STORE") && (h.isVideo(extension) || h.isPDF(extension)) || h.isImage(extension) || h.isTextFile(extension)) {
                                 if (fileExisted != null) {
                                     System.out.println("File name: " + filename + " exists in locker. Would you like to replace the file? (Y/N)");
                                     input = user_input.next();
@@ -212,7 +258,7 @@ public class RunDedup {
                                     System.out.println("-------------------------------------" + "\n");
                                 }
                             //MULTIPLE FILE: Dynamic size chunking
-                            } else if (extension != null){
+                            } else if (extension != null && !filename.equalsIgnoreCase(".DS_STORE")){
                                 if (fileExisted != null) {
                                     System.out.println("File name: " + filename + " exists in locker. Would you like to replace the file? (Y/N)");
                                     input = user_input.next();
@@ -285,7 +331,7 @@ public class RunDedup {
                 long timerStart;
                 long timerEnd;
 
-                System.out.println("Enter name of the file you want to delete. Please try again. ");
+                System.out.println("Enter name of the file you want to delete. ");
                 String deletionFileName;
                 do {
                     deletionFileName = user_input.next();
@@ -299,14 +345,39 @@ public class RunDedup {
                         System.out.println("Time used to delete file <<" + deletionFileName + ">> is " + (double) (timerEnd - timerStart)/1000 + " seconds.");
                         System.out.println("-------------------------------------" + "\n");
                     } else {
-                        System.out.println("Could not find file you want to delete.");
+                        System.out.println("Could not find file you want to delete. Please try again.");
                     }
                 }
                 while (deletionFileName.equals("finish"));
             } else if (input.equalsIgnoreCase("check files")){
                 locker.showFilesInFileLocker();
             }else if (input.equalsIgnoreCase("finish")) {
+                System.out.println("Would you like to export your current locker <" + lockerName + ">? [Y/N]");
+                input = user_input.next();
+                while(!input.equalsIgnoreCase("Y") && !input.equalsIgnoreCase("N")){
+                    System.out.println("Input invalid. Please try again. \n" + "Would you like to export your current locker <" + lockerName + ">? [Y/N]");
+                    input = user_input.next();
+                }
+                if(input.equalsIgnoreCase("Y")){
+                    System.out.println("Please enter a valid path to store the exported locker.");
+                    input = user_input.next();
+                    String exportPath = input;
+                    File exportedPath = new File(exportPath);
+                    while(!exportedPath.isDirectory()){
+                        System.out.println("Invalid path. Please try again.");
+                        exportPath = user_input.next();
+                        exportedPath = new File(exportPath);
+                    }
+                    exportLocker(locker, exportPath);
+                    System.out.println("Locker has been successfully exported into the path: " + exportPath);
+                }
+                exportSerializedLocker(locker);
                 locker.printMyLockerStats();
+                try{
+                    printAllLockers();
+                } catch (Exception e){
+                    e.printStackTrace();
+                }
                 user_input.close();
                 break;
             }
@@ -326,5 +397,61 @@ public class RunDedup {
         int chunkSize = h.getChunksize(extension, fileSize);
         h.dynamicSizeChunk(filePath, chunkSize, locker);
         System.out.println(filename + " is added successfully");
+    }
+
+    protected static void exportSerializedLocker(MyLocker locker) throws IOException{
+        File f = new File("." + File.separator + "serialized" + File.separator);
+        if (!f.exists()){
+            f.mkdir();
+        }
+        if(f.isDirectory()){
+            System.out.println("IS DIRECTORY");
+        }
+        FileOutputStream fos = new FileOutputStream("." + File.separator + "serialized"+ File.separator + locker.getNameOfLocker());
+        ObjectOutputStream oos = new ObjectOutputStream(fos);
+        oos.writeObject(locker);
+    }
+
+    protected static MyLocker importSerializedLocker(String lockerName) throws IOException, ClassNotFoundException {
+        ObjectInputStream ois = new ObjectInputStream(new FileInputStream("serialized"+ File.separator + lockerName));
+        MyLocker loadedLocker = (MyLocker) ois.readObject();
+        return loadedLocker;
+    }
+
+    protected static void exportLocker(MyLocker locker, String exportPath) throws IOException{
+        FileOutputStream fos = new FileOutputStream(exportPath + File.separator + locker.getNameOfLocker());
+        ObjectOutputStream oos = new ObjectOutputStream(fos);
+        oos.writeObject(locker);
+    }
+
+    protected static MyLocker importLocker(String importPath) throws IOException, ClassNotFoundException {
+        FileInputStream fis = new FileInputStream(importPath);
+        ObjectInputStream ois = new ObjectInputStream(fis);
+        MyLocker loadedLocker = (MyLocker) ois.readObject();
+        return loadedLocker;
+    }
+
+    protected static void printAllLockers() throws IOException, ClassNotFoundException{
+        File folder = new File("serialized");
+        File[] listOfFiles = folder.listFiles();
+//        boolean cont = true;
+//        ArrayList<MyLocker> lockers = new ArrayList<>();
+//        FileInputStream fis = new FileInputStream("serialized");
+//        ObjectInputStream ois = new ObjectInputStream(fis);
+//        while(cont){
+//            MyLocker ml = (MyLocker) ois.readObject();
+//            if(ml != null)
+//                lockers.add(ml);
+//            else
+//                cont = false;
+//        }
+//        for(MyLocker ml : lockers){
+//            System.out.println(ml.getNameOfLocker());
+//        }
+        for (int i = 0; i < listOfFiles.length; i++){
+            if(listOfFiles[i].isFile()){
+                System.out.println(listOfFiles[i].getName());
+            }
+        }
     }
 }
